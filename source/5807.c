@@ -15,6 +15,9 @@
 #define GPIO_IRQ 0x0100
 //---------------------------------------------------------------------------------
 // Program entry point
+// RDA 5807 is a kind of i2c radio module, 
+// that is manipulated from gba gpio port with i2c protocolï¼Œ
+// in this concept of proof routine.
 //---------------------------------------------------------------------------------
 
 u8 RDA_reg_data[8]=
@@ -24,15 +27,18 @@ u8 RDA_reg_data[8]=
    0x00,0x40,  // 04H
    0x90,0x88,  //  05H
 };
+
 unsigned long frequency;
+
 u8 IRCOM[4]={0,0,0,0};
+
 void RDA5807_write_reg(void)
 {
-    u8 k;
+    	u8 k;
 	I2C_start();
-	// ÊÕÒôÄ£¿éĞ´Èë²Ù×÷
+	// æ”¶éŸ³æ¨¡å—å†™å…¥æ“ä½œ write to rda reg
 	I2C_write_byte(0x20);
-	// ¼Ä´æÆ÷Á¬ĞøĞ´²Ù×÷
+	// å¯„å­˜å™¨è¿ç»­å†™æ“ä½œ write 8 times
 	for(k=0; k<8; k++)
 	{
 		I2C_write_byte(RDA_reg_data[k]);
@@ -45,9 +51,9 @@ void RDA5807_read_reg(u8 *reg_buf)
 {
    //delayms(50);
    I2C_start();
-   // ÊÕÒôÄ£¿é¶ÁÈ¡²Ù×÷
+   // æ”¶éŸ³æ¨¡å—è¯»å–æ“ä½œ read rda reg
    I2C_write_byte(0x21);
-   // ¼Ä´æÆ÷Á¬Ğø¶Á²Ù×÷
+   // å¯„å­˜å™¨è¿ç»­è¯»æ“ä½œ read 4 times
    reg_buf[0] = I2C_read_byte(I2C_ACK);
    reg_buf[1] = I2C_read_byte(I2C_ACK);
    reg_buf[2] = I2C_read_byte(I2C_ACK);
@@ -56,21 +62,22 @@ void RDA5807_read_reg(u8 *reg_buf)
 }
 /**********************************************************
 
- Ä£¿éÉÏµç³õÊ¼»¯×Óº¯Êı
+ æ¨¡å—ä¸Šç”µåˆå§‹åŒ–å­å‡½æ•°
+ module startup routine
 
 **********************************************************/
 void RDA5807_power(void)
 {
    delayms(50);
 
-    // ·¢ËÍÈí¼ş¸´Î»Ö¸Áî
+    // å‘é€è½¯ä»¶å¤ä½æŒ‡ä»¤ send soft reset cmd
    RDA_reg_data[0] = 0x00;
    RDA_reg_data[1] = 0x02;
    RDA5807_write_reg();
 
    delayms(10);
 
-    // ÊÕÒôÄ£¿éÄ¬ÈÏ²ÎÊı
+    // æ”¶éŸ³æ¨¡å—é»˜è®¤å‚æ•° default parameter
    RDA_reg_data[0] = 0xd0;
    RDA_reg_data[1] = 0x01;
    RDA5807_write_reg();
@@ -78,7 +85,8 @@ void RDA5807_power(void)
 
 /**********************************************************
 
- ¹¦ÄÜÃèÊö£ºÊÕÒôÄ£¿é×Ô¶¯Ñ°Ì¨Ä£Ê½
+ åŠŸèƒ½æè¿°ï¼šæ”¶éŸ³æ¨¡å—è‡ªåŠ¨å¯»å°æ¨¡å¼
+ auto seek
 
 **********************************************************/
 void RDA5807_FM_seek(void)
@@ -87,35 +95,36 @@ void RDA5807_FM_seek(void)
    u8 i=0;
    u8  reg_data[4] = {0x00, 0x00, 0x00, 0x00};
 
-   RDA_reg_data[3] &= ~(1 << 4);      //µ÷Ğ³½ûÓÃ
+   RDA_reg_data[3] &= ~(1 << 4);      //è°ƒè°ç¦ç”¨ tune disable
 
-   // ÄÚ²¿×Ô¶¯Ñ°Ì¨Ê¹ÄÜ
-   RDA_reg_data[0] |=  (1 << 0);      //SEEKÎ»ÖÃ1
+   // å†…éƒ¨è‡ªåŠ¨å¯»å°ä½¿èƒ½ auto seek enable
+   RDA_reg_data[0] |=  (1 << 0);      //SEEKä½ç½®1 seek pos 1
    RDA5807_write_reg();
 
-    // µÈ´ıSTC ±êÖ¾ÖÃÎ»
+    // ç­‰å¾…STC æ ‡å¿—ç½®ä½ wait for flag stc being set
    while(0 == (reg_data[0] & 0x40))
    {
      delayms(20);
-      // ¶ÁÈ¡ÄÚ²¿×´Ì¬
+      // è¯»å–å†…éƒ¨çŠ¶æ€ read status
      RDA5807_read_reg(reg_data);
 	 if(i<10)
 	 i++;
 	 else break;
    }
-    // »ñÈ¡µ±Ç°¹¤×÷Æµµã
+    // è·å–å½“å‰å·¥ä½œé¢‘ç‚¹ get freq
    chan = reg_data[0] & 0x03;
    chan = reg_data[1] | (chan << 8);
    chan = chan << 6;
 
-    // ±£´æµ±Ç°¹¤×÷Æµµã
+    // ä¿å­˜å½“å‰å·¥ä½œé¢‘ç‚¹ save freq
    RDA_reg_data[2] = (chan >> 8) & 0xff;
    RDA_reg_data[3] = (chan & 0xff);
 }
 
 /**********************************************************
 
- ÆµÂÊÏÔÊ¾×Óº¯Êı
+ é¢‘ç‡æ˜¾ç¤ºå­å‡½æ•°
+ display freq routine
 
 **********************************************************/
 void  show_frequency(void)
@@ -123,17 +132,17 @@ void  show_frequency(void)
    u8 i,display[5];
    u16 temp;
 
-   temp = (RDA_reg_data[2]*256)+(RDA_reg_data[3]&0xc0);	 //¼ÆËã
+   temp = (RDA_reg_data[2]*256)+(RDA_reg_data[3]&0xc0);	 //è®¡ç®— calc
    temp = temp>>6;
    frequency = (unsigned long)(100*temp+87000)/100;
 
-   for(i=0; i<5; i++)  // ÇåÏÔ´æµ¥Ôª
+   for(i=0; i<5; i++)  // æ¸…æ˜¾å­˜å•å…ƒ clear
    display[i] = 0x00;
 
-   display[0] = (frequency)/1000 ;     //Êı¾İ×ª»»
+   display[0] = (frequency)/1000 ;     //æ•°æ®è½¬æ¢ freq to string
    display[1] = (frequency%1000)/100;
    display[2] = (frequency%100)/10;
-   display[3] = 0x2e;                  //Ğ¡Êıµã
+   display[3] = 0x2e;                  //å°æ•°ç‚¹ "."
    display[4] = (frequency%10);
 
    if(display[0] == 0)
@@ -152,7 +161,7 @@ void  show_frequency(void)
      display[4] += 0x30;
    }
 
-   //lcd_pos_xy(3,2);                      //ÆµÂÊÏÔÊ¾
+   //lcd_pos_xy(3,2);                      //é¢‘ç‡æ˜¾ç¤º
    //lcd_wdat(display[0]);
    //lcd_wdat(display[1]);
    //lcd_wdat(display[2]);
@@ -165,22 +174,23 @@ void  show_frequency(void)
 
 /**********************************************************
 
- ÒôÁ¿ÏÔÊ¾×Óº¯Êı
+ éŸ³é‡æ˜¾ç¤ºå­å‡½æ•°
+ display voice routine
 
 **********************************************************/
 void show_volume()
 {
    u8 temp,display[2];
 
-   temp = RDA_reg_data[7] & 0x0f; //È¡ÒôÁ¿Öµ
+   temp = RDA_reg_data[7] & 0x0f; //å–éŸ³é‡å€¼ get volume value
 
    display[0] = temp/10;
    display[1] = temp%10;
 
-   if(display[0] == 0)            //Èç¹û¸ßÎ»Îª0
+   if(display[0] == 0)            //å¦‚æœé«˜ä½ä¸º0 
    { 
-     display[0] = display[1];     //µÍÎ»ÏÔ´æÄÚÈİ½øÈë¸ßÎ»ÏÔ´æ
-     display[1] = 0x20;           //µÍÎ»²»ÏÔÊ¾
+     display[0] = display[1];     //ä½ä½æ˜¾å­˜å†…å®¹è¿›å…¥é«˜ä½æ˜¾å­˜
+     display[1] = 0x20;           //ä½ä½ä¸æ˜¾ç¤º
    }
    else 
    {
@@ -188,7 +198,7 @@ void show_volume()
    }
    display[0] += 0x30;
 
-   //lcd_pos_xy(13,2);              //ÒôÁ¿ÖµÏÔÊ¾
+   //lcd_pos_xy(13,2);              //éŸ³é‡å€¼æ˜¾ç¤º
    //lcd_wdat(display[0]);
    //lcd_wdat(display[1]);
    //irqEnable(IRQ_VBLANK); 
@@ -196,47 +206,52 @@ void show_volume()
    //irqDisable(IRQ_VBLANK);
    
 }
+/**********************************************************
 
+ hs0038b ir module routine
+
+**********************************************************/
 void IR_CODE(void)
 {
-	REG_IME = 0;
-    //iprintf("\x1b[4;0Hin\n");            				//ÖĞ¶Ï×Ü¿ª¹Ø
+	REG_IME = 0;//ä¸­æ–­æ€»å¼€å…³ set ime off
+    	//iprintf("\x1b[4;0Hin\n");            				
 	u8 j,k,N=0;
-    delay014ms(15);
+    	delay014ms(15);
 	if (REG_RCNT & GPIO_SI)
-    { 
+    	{ 
 		REG_IF |=IRQ_SERIAL;
 		REG_IME =1;
 		return;
-	}                           			//È·ÈÏIRĞÅºÅ³öÏÖ  
-	while (!(REG_RCNT & GPIO_SI))           //µÈIR±äÎª¸ßµçÆ½£¬Ìø¹ı9msµÄÇ°µ¼µÍµçÆ½ĞÅºÅ¡£
-	{delay014ms(1);}
-	for (j=0;j<4;j++)         				//ÊÕ¼¯ËÄ×éÊı¾İ
-	{
-		for (k=0;k<8;k++)        			//Ã¿×éÊı¾İÓĞ8Î»
+	}                           		
+	//ç¡®è®¤IRä¿¡å·å‡ºç°  
+	while (!(REG_RCNT & GPIO_SI))           //ç­‰IRå˜ä¸ºé«˜ç”µå¹³ï¼Œè·³è¿‡9msçš„å‰å¯¼ä½ç”µå¹³ä¿¡å·ã€‚
+	{	delay014ms(1);}
+		for (j=0;j<4;j++)         				//æ”¶é›†å››ç»„æ•°æ®
 		{
-			while (REG_RCNT & GPIO_SI)      //µÈ IR ±äÎªµÍµçÆ½£¬Ìø¹ı4.5msµÄÇ°µ¼¸ßµçÆ½ĞÅºÅ¡£
-			{delay014ms(1);}
-			while (!(REG_RCNT & GPIO_SI))   //µÈ IR ±äÎª¸ßµçÆ½
-			{delay014ms(1);}
-			while (REG_RCNT & GPIO_SI)      //¼ÆËãIR¸ßµçÆ½Ê±³¤
+			for (k=0;k<8;k++)        			//æ¯ç»„æ•°æ®æœ‰8ä½
 			{
-				delay014ms(1);
-				N++;        
-				if (N>=30)
-				{ 
-					REG_IF |=IRQ_SERIAL;
-					REG_IME=1;
-					return;
-				}              				//0.14ms¼ÆÊı¹ı³¤×Ô¶¯Àë¿ª¡£
-			}                        		//¸ßµçÆ½¼ÆÊıÍê±Ï             
-			IRCOM[j]=IRCOM[j] >> 1;                  //Êı¾İ×î¸ßÎ»²¹"0"
-			if (N>=8) 
-			{IRCOM[j] = IRCOM[j] | 0x80;} //Êı¾İ×î¸ßÎ»²¹"1"
-			N=0;
+				while (REG_RCNT & GPIO_SI)      //ç­‰ IR å˜ä¸ºä½ç”µå¹³ï¼Œè·³è¿‡4.5msçš„å‰å¯¼é«˜ç”µå¹³ä¿¡å·ã€‚
+				{delay014ms(1);}
+				while (!(REG_RCNT & GPIO_SI))   //ç­‰ IR å˜ä¸ºé«˜ç”µå¹³
+				{delay014ms(1);}
+				while (REG_RCNT & GPIO_SI)      //è®¡ç®—IRé«˜ç”µå¹³æ—¶é•¿
+				{
+					delay014ms(1);
+					N++;        
+					if (N>=30)
+					{ 
+						REG_IF |=IRQ_SERIAL;
+						REG_IME=1;
+						return;
+					}              			//0.14msè®¡æ•°è¿‡é•¿è‡ªåŠ¨ç¦»å¼€ã€‚
+				}                        		//é«˜ç”µå¹³è®¡æ•°å®Œæ¯•             
+				IRCOM[j]=IRCOM[j] >> 1;                 //æ•°æ®æœ€é«˜ä½è¡¥"0"
+				if (N>=8) 
+				{IRCOM[j] = IRCOM[j] | 0x80;} //æ•°æ®æœ€é«˜ä½è¡¥"1"
+				N=0;
 		}
 	}
-   //if (IRCOM[2]!=~IRCOM[3]) //²»µÈµÄ»°±íÊ¾½âÂëÊ§°Ü
+   //if (IRCOM[2]!=~IRCOM[3]) //ä¸ç­‰çš„è¯è¡¨ç¤ºè§£ç å¤±è´¥
    //if(IRCOM[0]!=0x00)||(IRCOM[1]!=0xff)
    //{
 	//	IRCOM[4]={0,0,0,0};
@@ -246,17 +261,18 @@ void IR_CODE(void)
     //}
 	
 	if((IRCOM[2]+IRCOM[3])!=0xff)
-   {
+   	{
 		//IRCOM[4]={0,0,0,0};
 		REG_IF |=IRQ_SERIAL;
 		REG_IME=1;
 		return;
-    }
+    	}
 	//iprintf("\x1b[5;0H%2X\n",IRCOM[2]);
-	REG_IF |=IRQ_SERIAL;	//ÖĞ¶ÏÓ¦´ğ±êÖ¾£¬±ØĞëÔÚÏàÓ¦Î»Ğ´Ò»£¬Çå³ıirq
+	REG_IF |=IRQ_SERIAL;	//ä¸­æ–­åº”ç­”æ ‡å¿—ï¼Œå¿…é¡»åœ¨ç›¸åº”ä½å†™ä¸€ï¼Œæ¸…é™¤irq
 	//REG_IME=1;
 	return;
 }
+
 int main(void) {
 //---------------------------------------------------------------------------------
 	int keys_pressed, d;
@@ -266,12 +282,12 @@ int main(void) {
 	irqInit();
 	consoleDemoInit();
 	irqEnable(IRQ_VBLANK);
-    iprintf("\x1b[0;0HRDA5807 Demo.Chn L/R Vol U/D\n");
-    irqDisable(IRQ_VBLANK);
+    	iprintf("\x1b[0;0HRDA5807 Demo.Chn L/R Vol U/D\n");
+    	irqDisable(IRQ_VBLANK);
 	RDA5807_power();
 	delayms(20);
 	RDA_reg_data[0] |= (1 << 1);
-    RDA5807_FM_seek();
+    	RDA5807_FM_seek();
 	show_volume();
 	show_frequency();
 	//irqSet(IRQ_VBLANK,readkeys);
@@ -283,103 +299,104 @@ int main(void) {
 	{	
 		while(1)
 		{
-		//delayms(17);
-		scanKeys();
-		//VBlankIntrWait();
-		keys_pressed = keysDown();
-		if( keys_pressed & KEY_L) 
-			{d=1;break;}
-		else if(keys_pressed & KEY_R)
+			//delayms(17);
+			scanKeys();
+			//VBlankIntrWait();
+			keys_pressed = keysDown();
+			if( keys_pressed & KEY_L) 
+				{d=1;break;}
+			else if(keys_pressed & KEY_R)
 				{d=2;break;}
 			else if(keys_pressed & KEY_UP)
-					{d=3;break;}
-					else if(keys_pressed & KEY_DOWN)
-							{d=4;break;}
-		d=0;
-		//IR_Setup();
-		//REG_IME = 0;
-		//irqDisable(IRQ_VBLANK);
-		//irqSet(IRQ_SERIAL,IR_CODE);
-		//((RCNT*)REGRCNT)->SI_Int=1;
-		//irqEnable(IRQ_SERIAL);//¿ªÆôÖĞ¶
-		i=0;
-		REG_IME = 1;
-		//delayms(20);//µÈ´ıÖĞ¶Ï°ëÃë
-		while(i<65535)
-		{
-		if(IRCOM[2]==0)
-		i++;
-		else break;
-		}
-		REG_IME = 0;
-		//iprintf("\x1b[6;0HIR read=%2X\n",IRCOM[2]);
-		//irqDisable(IRQ_SERIAL);//¹Ø±ÕÖĞ¶Ï
-		if(IRCOM[2]==0x43)
+				{d=3;break;}
+			else if(keys_pressed & KEY_DOWN)
+				{d=4;break;}
+			d=0;
+			//IR_Setup();
+			//REG_IME = 0;
+			//irqDisable(IRQ_VBLANK);
+			//irqSet(IRQ_SERIAL,IR_CODE);
+			//((RCNT*)REGRCNT)->SI_Int=1;
+			//irqEnable(IRQ_SERIAL);//å¼€å¯ä¸­ï¿½
+			i=0;
+			REG_IME = 1;
+			//delayms(20);//ç­‰å¾…ä¸­æ–­åŠç§’
+
+			while(i<65535)
+			{
+				if(IRCOM[2]==0)
+				{i++;}else{break;}
+			}
+
+			REG_IME = 0;
+			//iprintf("\x1b[6;0HIR read=%2X\n",IRCOM[2]);
+			//irqDisable(IRQ_SERIAL);//å…³é—­ä¸­æ–­
+			if(IRCOM[2]==0x43)
 			{
 				d=1;iprintf("\x1b[7;0Hd=%d.\n",d);
 				IRCOM[0]=IRCOM[1]=IRCOM[2]=IRCOM[3]=0;break;
 			}
-		else if(IRCOM[2]==0x40)
-				{
-					d=2;iprintf("\x1b[7;0Hd=%d.\n",d);
-					IRCOM[0]=IRCOM[1]=IRCOM[2]=IRCOM[3]=0;break;
-				}
+			else if(IRCOM[2]==0x40)
+			{
+				d=2;iprintf("\x1b[7;0Hd=%d.\n",d);
+				IRCOM[0]=IRCOM[1]=IRCOM[2]=IRCOM[3]=0;break;
+			}
 			else if(IRCOM[2]==0x09)
-					{
-						d=3;iprintf("\x1b[7;0Hd=%d.\n",d);
-						IRCOM[0]=IRCOM[1]=IRCOM[2]=IRCOM[3]=0;break;
-					}
-				else if(IRCOM[2]==0x15)
-						{
-							d=4;iprintf("\x1b[7;0Hd=%d.\n",d);
-							IRCOM[0]=IRCOM[1]=IRCOM[2]=IRCOM[3]=0;break;
-						}
-		IRCOM[0]=IRCOM[1]=IRCOM[2]=IRCOM[3]=d=0;
+			{
+				d=3;iprintf("\x1b[7;0Hd=%d.\n",d);
+				IRCOM[0]=IRCOM[1]=IRCOM[2]=IRCOM[3]=0;break;
+			}
+			else if(IRCOM[2]==0x15)
+			{
+				d=4;iprintf("\x1b[7;0Hd=%d.\n",d);
+				IRCOM[0]=IRCOM[1]=IRCOM[2]=IRCOM[3]=0;break;
+			}
+			IRCOM[0]=IRCOM[1]=IRCOM[2]=IRCOM[3]=d=0;
 		}
 				
 		if(d==2)
 		{
-		//iprintf("\x1b[7;0Hd=%d\n",d);
-		delayms(20);
-		RDA_reg_data[0] |= (1 << 1); 	//SEEK UP	 
-        RDA5807_FM_seek();
-		iprintf("\x1b[8;0Hseek up ok.\n");
+			//iprintf("\x1b[7;0Hd=%d\n",d);
+			delayms(20);
+			RDA_reg_data[0] |= (1 << 1); 	//SEEK UP	 
+			RDA5807_FM_seek();
+			iprintf("\x1b[8;0Hseek up ok.\n");
 		}
 		if(d==1)
 		{
-		//iprintf("\x1b[7;0Hd=%d\n",d);
-		delayms(20);
-		RDA_reg_data[0] &= ~(1 << 1);  //SEEK DOWN		 
-        RDA5807_FM_seek();
-		iprintf("\x1b[8;0Hseek down ok.\n");
+			//iprintf("\x1b[7;0Hd=%d\n",d);
+			delayms(20);
+			RDA_reg_data[0] &= ~(1 << 1);  //SEEK DOWN		 
+			RDA5807_FM_seek();
+			iprintf("\x1b[8;0Hseek down ok.\n");
 		}
 		if(d==3)
 		{
-		//iprintf("\x1b[7;0Hd=%d\n",d);
-		delayms(20);
-		if((RDA_reg_data[7] & 0x0f) < 0x0f)
-         {
-           RDA_reg_data[0] = 0xd0;
-           RDA_reg_data[1] = 0x01;
-           RDA_reg_data[3] &= ~(1 << 4);
+			//iprintf("\x1b[7;0Hd=%d\n",d);
+			delayms(20);
+			if((RDA_reg_data[7] & 0x0f) < 0x0f)
+			 {
+			   RDA_reg_data[0] = 0xd0;
+			   RDA_reg_data[1] = 0x01;
+			   RDA_reg_data[3] &= ~(1 << 4);
 
-           RDA_reg_data[7]++;	 // ÒôÁ¿µİÔö
-           RDA5807_write_reg();
-		  }
+			   RDA_reg_data[7]++;	 // éŸ³é‡é€’å¢
+			   RDA5807_write_reg();
+			  }
 		}
 		if(d==4)
 		{
-		//iprintf("\x1b[7;0Hd=%d\n",d);
-		delayms(20);
-		if((RDA_reg_data[7] & 0x0f) > 0x00)
-         {
-           RDA_reg_data[0] = 0xd0;
-           RDA_reg_data[1] = 0x01;
-           RDA_reg_data[3] &= ~(1 << 4);
-           
-           RDA_reg_data[7]--;	 // ÒôÁ¿µİ¼õ
-           RDA5807_write_reg();
-           }
+			//iprintf("\x1b[7;0Hd=%d\n",d);
+			delayms(20);
+			if((RDA_reg_data[7] & 0x0f) > 0x00)
+			 {
+				   RDA_reg_data[0] = 0xd0;
+				   RDA_reg_data[1] = 0x01;
+				   RDA_reg_data[3] &= ~(1 << 4);
+
+				   RDA_reg_data[7]--;	 // éŸ³é‡é€’å‡
+				   RDA5807_write_reg();
+			}
 		}
 		show_volume();
 		show_frequency();
